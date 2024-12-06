@@ -118,7 +118,7 @@ public class ClassExecutor {
 
     private Optional<Method> getMethod(Class<?> clazz) {
         return Arrays.stream(clazz.getMethods())
-                .filter(method -> !method.getReturnType().equals(Void.class))
+                .filter(method -> !method.getReturnType().equals(void.class))
                 .filter(method -> method.getParameterCount() == 1)
                 .filter(method -> !Modifier.isStatic(method.getModifiers()))
                 .filter(method -> method.getDeclaringClass().equals(clazz))
