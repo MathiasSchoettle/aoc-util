@@ -5,6 +5,8 @@ import org.mschoe.aocutil.lib.ClassExecutor;
 import org.mschoe.aocutil.lib.exception.AocUtilException;
 import org.mschoe.aocutil.lib.util.Result;
 
+import java.util.Map;
+
 import static org.mschoe.aocutil.lib.util.TimeUtils.currentDay;
 import static org.mschoe.aocutil.lib.util.TimeUtils.currentYear;
 
@@ -40,17 +42,22 @@ public class AocExecutor {
         }
     }
 
+    @SuppressWarnings("unchecked")
     private void handleResult(Result result, int day, int year) {
         switch (result) {
-            case Result.Success success -> printSolution(success.object(), day, year);
+            case Result.Success<?> success -> printSolution((Map<Integer,Object>) success.object(), day, year);
             case Result.Error error -> printError(error.errorMessage());
         }
     }
 
-    private void printSolution(Object solution, int day, int year) {
-        System.out.printf("""
-                Solution for %d.12.%d: %s
-                %n""", day, year, solution);
+    private void printSolution(Map<Integer,Object> solutions, int day, int year) {
+
+        for (var entry : solutions.entrySet()) {
+            var solution = entry.getValue();
+            System.out.printf("""
+                Solution for %d.12.%d, Part %d: %s
+                """, day, year, entry.getKey(), solution);
+        }
     }
 
     private void printError(String errorMessage) {

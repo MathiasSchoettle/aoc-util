@@ -1,5 +1,6 @@
 package org.mschoe.aocutil.lib;
 
+import org.mschoe.aocutil.Part;
 import org.mschoe.aocutil.lib.exception.AocUtilException;
 import org.mschoe.aocutil.lib.transform.Transform;
 import org.mschoe.aocutil.lib.transform.TransformProvider;
@@ -7,8 +8,8 @@ import org.mschoe.aocutil.lib.transform.Transformer;
 import org.mschoe.aocutil.lib.util.Result;
 
 import java.lang.reflect.*;
-import java.util.Arrays;
-import java.util.Optional;
+import java.util.*;
+import java.util.stream.Collectors;
 
 public class ClassExecutor {
 
@@ -23,19 +24,34 @@ public class ClassExecutor {
 
     public Result execute(Class<?> clazz, int day, int year) {
 
-        Optional<Method> methodOptional = getMethod(clazz);
+        Result methodResult = getMethods(clazz);
 
-        if (methodOptional.isEmpty()) {
-            return new Result.Error("No executable method found in " + clazz.getName());
+        if (!(methodResult instanceof Result.Success<?> success)) {
+            return methodResult;
         }
 
-        var method = methodOptional.get();
-        Type parameterType = method.getGenericParameterTypes()[0];
+        Map<Integer,Method> methods = (Map<Integer,Method>) success.object();
+        Map<Integer,Object> results = new HashMap<>();
 
+        for (var entry : methods.entrySet()) {
+            Result result = executeMethod(clazz, entry.getValue(), day, year);
+
+            if (!(result instanceof Result.Success<?> res)) {
+                return result;
+            }
+
+            results.put(entry.getKey(), res.object());
+        }
+
+        return new Result.Success<>(results);
+    }
+
+    private Result executeMethod(Class<?> clazz, Method method, int day, int year) {
+        Type parameterType = method.getGenericParameterTypes()[0];
         var transformerOptional = getTransformer(method, parameterType);
 
         if (transformerOptional.isEmpty()) {
-            return new Result.Error("No default provider found for type (%s). Use the Transform annotation to supply a custom transformer.".formatted(parameterType.getTypeName()));
+            return new Result.Error("No default provider found for type (%s) in method %s. Use the Transform annotation to supply a custom transformer.".formatted(parameterType.getTypeName(), method.getName()));
         }
 
         var transformer = transformerOptional.get();
@@ -47,9 +63,9 @@ public class ClassExecutor {
         String inputString = inputProvider.get(day, year);
 
         return switch (instantiate(clazz)) {
-            case Result.Success success -> tryTransform(transformer, inputString)
+            case Result.Success<?> success -> tryTransform(transformer, inputString)
                     .map(input -> invoke(method, success.object(), input))
-                    .orElse(new Result.Error("Input data can not be transformed into requested format."));
+                    .orElse(new Result.Error("Input data can not be transformed into the requested format."));
             case Result.Error error -> error;
         };
     }
@@ -108,7 +124,7 @@ public class ClassExecutor {
     private Result invoke(Method method, Object instantiated, Object input) {
         try {
             Object invoke = method.invoke(instantiated, input);
-            return new Result.Success(invoke);
+            return new Result.Success<>(invoke);
         } catch (IllegalAccessException e) {
             throw new AocUtilException("Method was not accessible");
         } catch (InvocationTargetException e) {
@@ -116,13 +132,36 @@ public class ClassExecutor {
         }
     }
 
-    private Optional<Method> getMethod(Class<?> clazz) {
-        return Arrays.stream(clazz.getMethods())
+    private Result getMethods(Class<?> clazz) {
+        List<Method> list = Arrays.stream(clazz.getMethods())
                 .filter(method -> !method.getReturnType().equals(void.class))
                 .filter(method -> method.getParameterCount() == 1)
                 .filter(method -> !Modifier.isStatic(method.getModifiers()))
                 .filter(method -> method.getDeclaringClass().equals(clazz))
-                .findFirst();
+                .filter(method -> method.isAnnotationPresent(Part.class))
+                .toList();
+
+        if (list.isEmpty()) {
+            return new Result.Error("No solution methods found in " + clazz.getName());
+        }
+
+        boolean invalidPartAnnotations = list.stream().map(method -> method.getAnnotation(Part.class).value())
+                .collect(Collectors.groupingBy(Enum::ordinal, Collectors.counting()))
+                .entrySet().stream()
+                .anyMatch(entry -> entry.getValue() > 1);
+
+        if (invalidPartAnnotations) {
+            return new Result.Error("Multiple solutions for same part exist");
+        }
+
+        Map<Integer, Method> methods = new HashMap<>();
+
+        for (Method method : list) {
+            int part = method.getAnnotation(Part.class).value().ordinal();
+            methods.put(part + 1, method);
+        }
+
+        return new Result.Success<>(methods);
     }
 
     private Result instantiate(Class<?> clazz) {
@@ -135,7 +174,7 @@ public class ClassExecutor {
         var constructor = constructors[0];
 
         try {
-            return new Result.Success(constructor.newInstance());
+            return new Result.Success<>(constructor.newInstance());
         } catch (ReflectiveOperationException | IllegalArgumentException e) {
             return new Result.Error("Unable to instantiate class (%s)".formatted(clazz.getSimpleName()));
         }
