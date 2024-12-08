@@ -23,6 +23,10 @@ public class InputProvider {
     public InputProvider() {
         this.client = HttpClient.newHttpClient();
         this.sessionCookie = System.getenv("SESSION_COOKIE");
+
+        if (sessionCookie == null) {
+            throw new AocUtilException("SessionCookie not set");
+        }
     }
 
     public String get(int day, int year) {
