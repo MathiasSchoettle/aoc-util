@@ -1,5 +1,6 @@
 package org.mschoe.aocutil.lib;
 
+import org.mschoe.aocutil.Input;
 import org.mschoe.aocutil.Part;
 import org.mschoe.aocutil.lib.exception.AocUtilException;
 import org.mschoe.aocutil.lib.transform.Transform;
@@ -60,7 +61,12 @@ public class ClassExecutor {
             return new Result.Error("Could not provide input in correct format. Does the type of the custom transformer match the method input?");
         }
 
-        String inputString = inputProvider.get(day, year);
+        String inputString;
+        if (method.isAnnotationPresent(Input.class)) {
+            inputString = method.getAnnotation(Input.class).value();
+        } else {
+            inputString = inputProvider.get(day, year);
+        }
 
         return switch (instantiate(clazz)) {
             case Result.Success<?> success -> tryTransform(transformer, inputString)
